@@ -3,9 +3,11 @@ import bosdyn.client.local_grid
 import bosdyn.client
 import numpy as np
 import yaml
+import struct
 
 import tf2_ros
 from nav_msgs.msg import GridCells
+from geometry_msgs.msg import Point
 
 class LocalGridPublisher:
     def __init__(self, config):
@@ -18,6 +20,7 @@ class LocalGridPublisher:
         self.robot = sdk.create_robot('192.168.50.3')
         self.robot.authenticate('robot', 'niftiniftinifti')
         self.grid_client = robot.ensure_client(bosdyn.client.local_grid.LocalGridClient.default_service_name)
+        self.format_map = {0: "@", 1: "<f", 2: "<d", 3: "<b", 4:"<B", 5:"<h", 6: "<H"}
 
     def init_ros(self):
         self.rate = rospy.Rate(self.config["ros_rate"])
@@ -25,8 +28,13 @@ class LocalGridPublisher:
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
 
         self.gc_terrain_publisher = rospy.Publisher("spot/grid/terrain", GridCells, queue_size=1)
+        self.gc_terrain_valid_publisher = rospy.Publisher("spot/grid/terrain_valid", GridCells, queue_size=1)
         self.gc_intensity_publisher = rospy.Publisher("spot/grid/intensity", GridCells, queue_size=1)
-        self.gc_valid_publisher = rospy.Publisher("spot/grid/valid", GridCells, queue_size=1)
+        self.gc_no_step_publisher = rospy.Publisher("spot/grid/no_step", GridCells, queue_size=1)
+        self.gc_obstacle_distance_publisher = rospy.Publisher("spot/grid/obstacle_distance", GridCells, queue_size=1)
+
+    def decode(self, data, cell_format):
+        return struct.unpack(self.format_map[cell_format], data)
 
     def get_local_grids(self, names):
         # Get all grids in protobuff format
@@ -38,18 +46,44 @@ class LocalGridPublisher:
             acquisition_time = grid.local_grid.acquisition_time
             transforms_snapshot = grid.local_grid.transforms_snapshot
             frame_name_local_grid_data = grid.local_grid.frame_name_local_grid_data
-            extent = grid.local_grid.extent
+            extent = grid.local_grid.extent # cell_size, num_cells_x, num_cells_y
             cell_format = grid.local_grid.cell_format
             encoding = grid.local_grid.encoding
             data = grid.local_grid.data
             rle_counts = grid.local_grid.rle_counts
-            cell_value_scale = grid.local_grid.cell_value_scale
+            cell_value_scale = np.maximum(1, grid.local_grid.cell_value_scale)
             cell_value_offset = grid.local_grid.cell_value_offset
+
+            # Numpy format of cell
+            numpy_cell_format = self.format_map[cell_format]
 
             # Check that we have the correct name
             assert local_grid_type_name == name
 
-            # Make the decoded grid as an array
+            # Decode the data
+            points = []
+            idx = 0
+            for i, d in enumerate(data):
+                # Height of cell
+                z = d * cell_value_scale + cell_value_offset
+
+                # Go over rle counts to decode repetitions
+                for _ in range(rle_counts[i]):
+                    # x and y values (in grid frame)
+                    x = (idx % extent.num_cells_x) * extent.cell_size
+                    y = (idx // extent.num_cells_x) * extent.cell_size
+                    idx += 1
+
+                    # Add point to points list
+                    pt = Point()
+                    pt.x = x
+                    pt.y = y
+                    pt.z = z
+
+                    points.append(pt)
+
+
+
 
 
 
