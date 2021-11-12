@@ -1,0 +1,5 @@
+.idea/
+.bagfiles/
+*.pyc
+*.bag
+*.pkl
