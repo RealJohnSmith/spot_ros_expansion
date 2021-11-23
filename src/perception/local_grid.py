@@ -108,7 +108,7 @@ class LocalGridPublisher:
             # Make ros message
             grid_msg = GridCells()
             grid_msg.header.frame_id = "body"
-            grid_msg.header.stamp = acquisition_time
+            grid_msg.header.stamp = rospy.Time(acquisition_time.seconds, acquisition_time.nanos)
             grid_msg.cells = points
             grid_msg.cell_width = extent.cell_size
             grid_msg.cell_height = extent.cell_size
@@ -125,7 +125,7 @@ class LocalGridPublisher:
         while not rospy.is_shutdown():
 
             cell_msg_dict = self.get_local_grids(self.grid_names)
-            #self.publish_msgs(cell_msg_dict)
+            self.publish_msgs(cell_msg_dict)
 
             self.rate.sleep()
 
