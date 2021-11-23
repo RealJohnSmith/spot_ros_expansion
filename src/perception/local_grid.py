@@ -1,6 +1,7 @@
 import rospy
 import bosdyn.client.local_grid
 import bosdyn.client
+from bosdyn.client import frame_helpers
 import numpy as np
 import yaml
 import struct
@@ -24,6 +25,7 @@ class LocalGridPublisher:
         self.format_map = {0: "@", 1: "<f", 2: "<d", 3: "<b", 4:"<B", 5:"<h", 6: "<H"}
 
     def init_ros(self):
+        self.node = rospy.init_node("spot_grid_perception")
         self.rate = rospy.Rate(self.config["ros_rate"])
         self.tf_buffer = tf2_ros.Buffer(cache_time=rospy.Duration(10))
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
@@ -33,25 +35,12 @@ class LocalGridPublisher:
             self.gc_publisher_dict[grid_name] = rospy.Publisher(f"spot/grid/{grid_name}", GridCells, queue_size=1)
 
     def decode(self, data, cell_format):
-        return struct.unpack(self.format_map[cell_format], data)
-
-    def calc_transform_to_body(self, transforms_snapshot, frame_name_local_grid_data):
-        current_frame = frame_name_local_grid_data
-
-        pose_list = []
-        for i in range(10):
-            tf = transforms_snapshot.child_to_parent_edge_map[current_frame]
-            pose_list.append(tf.parent_tform_child)
-            current_frame = tf.parent_frame_name
-            if current_frame == "body":
-                break
-
-        # Multiply all transforms and then reverse to get body to grid
-        grid_to_body_tf = pose_list[0]
-        for p in pose_list[1:]:
-            grid_to_body_tf *= p
-        #grid_to_body_tf = grid_to_body_tf.reverse()
-        return grid_to_body_tf
+        n_b = struct.calcsize(self.format_map[cell_format])
+        data_arr = []
+        for i in range(0, len(data), n_b):
+            dec_pt = struct.unpack(self.format_map[cell_format], data[i:i+n_b])
+            data_arr.append(dec_pt[0])
+        return data_arr
 
     def get_local_grids(self, names):
         # Ros grid messages
@@ -74,38 +63,47 @@ class LocalGridPublisher:
             cell_value_scale = np.maximum(1, grid.local_grid.cell_value_scale)
             cell_value_offset = grid.local_grid.cell_value_offset
 
-            # Check that we have the correct name
+            data_comp = self.decode(data, cell_format)
+            
+            if encoding == 2:
+                data_dec = []
+                # Decode using rle
+                for i in range(len(rle_counts)):
+                    for _ in range(rle_counts[i]):
+                        data_dec.append(data_comp[i])
+            else:
+                data_dec = data_comp
+            
+            #Check that we have the correct name
             assert local_grid_type_name == name
 
             # Calculate transform from grid corner to body frame
-            grid_to_body_tf = self.calc_transform_to_body(transforms_snapshot, frame_name_local_grid_data)
-
+            grid_to_body_tf = frame_helpers.get_a_tform_b(transforms_snapshot, frame_name_local_grid_data, "body")
+            
             # Decode the data
             points = []
             idx = 0
-            for i, d in enumerate(data):
+            for i, d in enumerate(data_dec):
                 # Height of cell
-                z = self.decode(d, cell_format) * cell_value_scale + cell_value_offset
+                z = d * cell_value_scale + cell_value_offset
 
-                # Go over rle counts to decode repetitions
-                for _ in range(rle_counts[i]):
-                    # x and y values (in grid frame)
-                    x = (idx % extent.num_cells_x) * extent.cell_size
-                    y = (idx // extent.num_cells_x) * extent.cell_size
-                    idx += 1
+                # x and y values (in grid frame)
+                x = (idx % extent.num_cells_x) * extent.cell_size
+                y = (idx // extent.num_cells_x) * extent.cell_size
+                idx += 1
 
-                    # Apply transform (just translation here)
-                    x_tf = grid_to_body_tf.position.x
-                    y_tf = grid_to_body_tf.position.y
-                    z_tf = grid_to_body_tf.position.z
+                # Apply transform (just translation here)
+                x_tf = grid_to_body_tf.position.x
+                y_tf = grid_to_body_tf.position.y
+                z_tf = grid_to_body_tf.position.z
 
-                    # Add point to points list
-                    pt = Point()
-                    pt.x = x_tf
-                    pt.y = y_tf
-                    pt.z = z_tf
-
-                    points.append(pt)
+                # Add point to points list
+                pt = Point()
+                pt.x = x_tf
+                pt.y = y_tf
+                pt.z = z_tf
+                
+                points.append(pt)
 
             # Make ros message
             grid_msg = GridCells()
@@ -127,7 +125,7 @@ class LocalGridPublisher:
         while not rospy.is_shutdown():
 
             cell_msg_dict = self.get_local_grids(self.grid_names)
-            self.publish_msgs(cell_msg_dict)
+            #self.publish_msgs(cell_msg_dict)
 
             self.rate.sleep()
 
