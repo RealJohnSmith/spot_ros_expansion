@@ -5,6 +5,7 @@ from bosdyn.client import frame_helpers
 import numpy as np
 import yaml
 import struct
+import sys
 
 import tf2_ros
 from nav_msgs.msg import GridCells
@@ -21,7 +22,8 @@ class LocalGridPublisher:
         self.robot = self.sdk.create_robot('192.168.50.3')
         self.robot.authenticate('robot', 'niftiniftinifti')
         self.grid_client = self.robot.ensure_client(bosdyn.client.local_grid.LocalGridClient.default_service_name)
-        self.grid_names = ["terrain", "terrain_valid", "intensity", "no_step", "obstacle_distance"]
+        # self.grid_names = ["terrain", "terrain_valid", "intensity", "no_step", "obstacle_distance"]
+        self.grid_names = ["terrain", "terrain_valid"]
         self.format_map = {0: "@", 1: "<f", 2: "<d", 3: "<b", 4:"<B", 5:"<h", 6: "<H"}
 
     def init_ros(self):
@@ -62,7 +64,6 @@ class LocalGridPublisher:
             rle_counts = grid.local_grid.rle_counts
             cell_value_scale = np.maximum(1, grid.local_grid.cell_value_scale)
             cell_value_offset = grid.local_grid.cell_value_offset
-
             data_comp = self.decode(data, cell_format)
             
             if encoding == 2:
@@ -78,7 +79,7 @@ class LocalGridPublisher:
             assert local_grid_type_name == name
 
             # Calculate transform from grid corner to body frame
-            grid_to_body_tf = frame_helpers.get_a_tform_b(transforms_snapshot, frame_name_local_grid_data, "body")
+            grid_to_body_tf = frame_helpers.get_a_tform_b(transforms_snapshot, "body", frame_name_local_grid_data)
             
             # Decode the data
             points = []
@@ -99,9 +100,9 @@ class LocalGridPublisher:
 
                 # Add point to points list
                 pt = Point()
-                pt.x = x_tf
-                pt.y = y_tf
-                pt.z = z_tf
+                pt.x = x_tf + x
+                pt.y = y_tf + y
+                pt.z = z_tf + z
                 
                 points.append(pt)
 
