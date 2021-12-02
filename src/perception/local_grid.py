@@ -23,7 +23,7 @@ class LocalGridPublisher:
         self.robot.authenticate('robot', 'niftiniftinifti')
         self.grid_client = self.robot.ensure_client(bosdyn.client.local_grid.LocalGridClient.default_service_name)
         # self.grid_names = ["terrain", "terrain_valid", "intensity", "no_step", "obstacle_distance"]
-        self.grid_names = ["terrain", "terrain_valid"]
+        self.grid_names = ["terrain"]
         self.format_map = {0: "@", 1: "<f", 2: "<d", 3: "<b", 4:"<B", 5:"<h", 6: "<H"}
 
     def init_ros(self):
@@ -62,7 +62,7 @@ class LocalGridPublisher:
             encoding = grid.local_grid.encoding # 0: unspecified, 1: raw, 2: rle
             data = grid.local_grid.data
             rle_counts = grid.local_grid.rle_counts
-            cell_value_scale = np.maximum(1, grid.local_grid.cell_value_scale)
+            cell_value_scale = grid.local_grid.cell_value_scale
             cell_value_offset = grid.local_grid.cell_value_offset
             data_comp = self.decode(data, cell_format)
             
