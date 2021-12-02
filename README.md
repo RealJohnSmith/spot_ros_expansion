@@ -2,4 +2,4 @@ Repo for testing Boston dynamics Spot advanced SDK functions and integrating the
 
 Current work in progress:
 
-- local_grid.py publishes spot's local terrain grid to a ros topic
+- local_grid.py publishes spot's local grid to ROS GridCell (requires optimization for faster processing)
