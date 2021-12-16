@@ -1,3 +1,6 @@
+!! Moved development to a fork of clearpath driver: https://github.com/silverjoda/spot_ros 
+
+
 Repo for testing Boston dynamics Spot advanced SDK functions and integrating them into the existing clearpath ROS driver.
 I'll soon be pushing a fork of the Clearpath driver which includes extensions to set all mobility parameters such as terrain friction hint, obstacle
 avoidance cushion, reading spot local grid maps and more, through ros topics.
